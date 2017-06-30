@@ -15,16 +15,16 @@ import os
 import subprocess
 
 # General Information - modify appropriately for each experiment
-number_of_samples = '4'  # Valid options are integer values indicating the number of sequenced samples
-number_of_samples_add_1 = '5'  # Add 1 to the number_of_samples
-species = 'human'  # Valid options for this pipeline are 'mouse' or 'human'
+number_of_samples = '10'  # Valid options are integer values indicating the number of sequenced samples
+number_of_samples_add_1 = '11'  # Add 1 to the number_of_samples
+species = 'mouse'  # Valid options for this pipeline are 'mouse' or 'human'
 read_type = 'PE'  # Valid options are 'PE' or paired-end sequencing or 'SE' for single-end sequencing
-read_length = 150  # Valid options are integer values for the length of reads ordered (50bp, 75bp, 150bp, etc)
+read_length = 75  # Valid options are integer values for the length of reads ordered (50bp, 75bp, 150bp, etc)
 sample_suffix = 'fastq'  # suffix second to last in sequencing file, usually fastq, fasta, fa
 compression_suffix = 'gz'  # suffix at the end of sequencing file
 n_cpus = 8  # Number of threads used to run analysis, more = faster
 pc = 'cortez_mac'
-experiment_name = '20160816_rnaseq'  # Insert name of experiment that is also the name of folder
+experiment_name = 'alex_rnaseq'  # Insert name of experiment that is also the name of folder
 
 # Program setup and files needed for analysis - should not need to change unless you add an additional organism
 if pc == 'cortez_mac':
