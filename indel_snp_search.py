@@ -11,6 +11,11 @@ Requirements for this experiment - sequencing data files must be in a folder ent
 in the first part of the script (starting with number of samples).
 This protocol is also optimized to be used after gene_expression_pipeline (such that the fasta files have already been
 trimmed).
+
+Important: The file names need to be a common sample base followed by a hyphen then sequential numbers (such as LP-1,
+LP-2)
+
+
 """
 
 import os
@@ -23,11 +28,11 @@ species = 'human'  # Valid options for this pipeline are 'mouse' or 'human'
 read_type = 'PE'  # Valid options are 'PE' or paired-end sequencing or 'SE' for single-end sequencing
 read_length = 150  # Valid options are integer values for the length of reads ordered (50bp, 75bp, 150bp, etc)
 sample_suffix = 'fastq'  # suffix second to last in sequencing file, usually fastq, fasta, fa
-compression_suffix = 'gz'  # suffix at the end of sequencing file
 n_cpus = 8  # Number of threads used to run analysis, more = faster
 pc = 'cortez_mac'
 experiment_name = '20160816_rnaseq'  # Insert name of experiment that is also the name of folder
-desired_search = 'indel'  # Valid options include 'indel' or 'snp'
+desired_search = 'indel'  # Valid options include 'indel' or 'snp' or 'both'
+
 # Program setup and files needed for analysis - should not need to change unless you add an additional organism
 if pc == 'cortez_mac':
     # Setting up programs
@@ -57,8 +62,12 @@ if pc == 'cortez_mac':
         print("Error - invalid species. Valid arguments are 'human' or 'mouse'")
         quit()
 
+
 # Alignment to the genome using BWA aligner
 def bwa_alignment(sample_base):
+    # -T excludes alignments with score lower than given interval in output
+    # -t number of threads
+    # -M marks shorter split hits as secondary
     print("Starting BWA alignment for {}".format(sample_base))
 
     # Creation of folder for aligned files
@@ -67,7 +76,7 @@ def bwa_alignment(sample_base):
 
     path_to_executable = '{} mem'.format(bwa)
     if read_type == 'SE':
-        reads = "{}/{}-trimmed_1.{}".format(fasta_directory, sample_base, sample_suffix)
+        reads = "{}/{}-trimmed.{}".format(fasta_directory, sample_base, sample_suffix)
     if read_type == 'PE':
         reads = '{0}/{1}-trimmed_1.{2} {0}/{1}-trimmed_2.{2}'.format(fasta_directory, sample_base, sample_suffix)
     important_options = '-T 15 -M -t {}'.format(n_cpus)
@@ -93,6 +102,7 @@ def bwa_alignment(sample_base):
 # Addition of reads groups to SAM file
 def bwa_read_group(sample_base):
     print("Starting read group addition for {}".format(sample_base))
+
     path_to_executable = 'java -jar {}'.format(picard)
     picard_program = "AddOrReplaceReadGroups"
     input_files = 'I={}/BWA_BAM_files/{}.sam'.format(output_directory, sample_base)
@@ -112,12 +122,14 @@ def bwa_read_group(sample_base):
         rc = process.poll()
 
     print("Finished adding read group {}".format(sample_base))
-    # Remove SAM file (conserve space)
-    os.remove('./BWA_BAM_files/{}.sam'.format(sample_base))
+    # Removes SAM file (conserves space)
+    os.remove('{}/BWA_BAM_files/{}.sam'.format(output_directory, sample_base))
 
 
 # Convert to BAM file
 def bwa_sam_to_bam(sample_base):
+    # -S input is SAM file
+    # -b output to BAM file
     print("Starting sam to bam conversion for {}".format(sample_base))
 
     path_to_executable = '{} view'.format(samtools)
@@ -139,6 +151,7 @@ def bwa_sam_to_bam(sample_base):
         rc = process.poll()
 
     print("Finished converting sam to bam conversion for {}".format(sample_base))
+    # Removes SAM file (conserves space)
     os.remove('{}/BWA_BAM_files/{}.rg.sam'.format(output_directory, sample_base))
 
 
@@ -213,11 +226,11 @@ def bwa_samstat_analysis(sample_base):
 
     print("Done with samstat analysis for {}".format(sample_base))
     # Move SAMSTAT analysis to quality control folder
-    os.rename('./BWA_BAM_files/{}.sorted.bam.samstat.html'.format(sample_base),
-              './quality_control/{}.bwa.sorted.bam.samstat.html'.format(sample_base))
+    os.rename('{}/BWA_BAM_files/{}.sorted.bam.samstat.html'.format(output_directory, sample_base),
+              '{}/quality_control/{}.bwa.sorted.bam.samstat.html'.format(output_directory, sample_base))
 
 
-# INDEL/SNP specific alignements
+# INDEL/SNP specific alignments
 def gatk_intervals(sample_base, entity_searched):
     print("Starting gatk intervals for {}".format(sample_base))
 
@@ -227,10 +240,17 @@ def gatk_intervals(sample_base, entity_searched):
     input_files = '-I {}/BWA_BAM_files/{}.sorted.bam'.format(output_directory, sample_base)
     output_file = '-o {}/BWA_BAM_files/{}.{}.intervals'.format(output_directory, entity_searched, sample_base)
 
-    if entity_searched == 'indel':
-        path_to_vcf = "--known {}".format(indel_vcf_file)
-    elif entity_searched == 'snp':
-        path_to_vcf = "--known {}".format(snp_vcf_file)
+    if species == 'human':
+        if entity_searched == 'indel':
+            path_to_vcf = "--known {}".format(indel_vcf_file)
+        elif entity_searched == 'snp':
+            path_to_vcf = "--known {}".format(snp_vcf_file)
+
+    elif species == 'mouse':
+        if entity_searched == 'indel':
+            path_to_vcf = "--known {}".format(indel_vcf_file)
+        else:
+            path_to_vcf = ''
 
     command = [path_to_executable, gatk_program, path_to_reference, input_files, path_to_vcf, output_file]
     call_code = ' '.join(command)
@@ -255,7 +275,8 @@ def gatk_realignment(sample_base, entity_searched):
     path_to_reference = "-R {}".format(reference_genome)
     options = '--maxReadsForRealignment 999999 --maxReadsInMemory 999999'
     input_files = '-I {}/BWA_BAM_files/{}.sorted.bam'.format(output_directory, sample_base)
-    intervals = '-targetIntervals {}/BWA_BAM_files/{}.{}.intervals'.format(output_directory, sample_base, entity_searched)
+    intervals = '-targetIntervals {}/BWA_BAM_files/{}.{}.intervals'.format(output_directory, sample_base,
+                                                                           entity_searched)
     output_file = '-o {}/BWA_BAM_files/{}.{}.realigned.bam'.format(output_directory, sample_base, entity_searched)
 
     command = [path_to_executable, gatk_program, path_to_reference, input_files, intervals, options, output_file]
@@ -283,10 +304,17 @@ def gatk_recalibration(sample_base, entity_searched):
     input_files = '-I {}/BWA_BAM_files/{}.{}.realigned.bam'.format(output_directory, sample_base, entity_searched)
     output_file = '-o {}/BWA_BAM_files/{}.{}.recal.table'.format(output_directory, sample_base, entity_searched)
 
-    if entity_searched == 'indel':
-        path_to_vcf = "-knownSites {}".format(indel_vcf_file)
-    elif entity_searched == 'snp':
-        path_to_vcf = "--knownSites {}".format(snp_vcf_file)
+    if species == 'human':
+        if entity_searched == 'indel':
+            path_to_vcf = "-knownSites {}".format(indel_vcf_file)
+        elif entity_searched == 'snp':
+            path_to_vcf = "--knownSites {}".format(snp_vcf_file)
+
+    elif species == 'mouse':
+        if entity_searched == 'indel':
+            path_to_vcf = "-knownSites {}".format(indel_vcf_file)
+        else:
+            path_to_vcf = ''
 
     command = [path_to_executable, gatk_program, path_to_reference, input_files, options, path_to_vcf, output_file]
     call_code = ' '.join(command)
@@ -336,7 +364,8 @@ def mark_dup(sample_base, entity_searched):
     path_to_executable = "java -jar {}".format(picard)
     picard_program = 'MarkDuplicates'
     input_files = 'I={}/BWA_BAM_files/{}.{}.realigned.recal.bam'.format(output_directory, sample_base, entity_searched)
-    output_file = 'O={}/BWA_BAM_files/{}.{}.realigned.recal.dupmarked.bam'.format(output_directory, sample_base, entity_searched)
+    output_file = 'O={}/BWA_BAM_files/{}.{}.realigned.recal.dupmarked.bam'.format(output_directory, sample_base,
+                                                                                  entity_searched)
     options = 'M={}/BWA_BAM_files/{}-{}-marked_dup_metrics.txt'.format(output_directory, sample_base, entity_searched)
 
     command = [path_to_executable, picard_program, input_files, output_file, options]
@@ -358,7 +387,8 @@ def mark_dup(sample_base, entity_searched):
 def dup_index(sample_base, entity_searched):
     print("Starting indel dup index for {}".format(sample_base))
     path_to_executable = '{} index'.format(samtools)
-    path_to_samples = '{}/BWA_BAM_files/{}.{}.realigned.recal.dupmarked.bam'.format(output_directory, sample_base, entity_searched)
+    path_to_samples = '{}/BWA_BAM_files/{}.{}.realigned.recal.dupmarked.bam'.format(output_directory, sample_base,
+                                                                                    entity_searched)
 
     command = [path_to_executable, path_to_samples]
     call_code = ' '.join(command)
@@ -381,15 +411,27 @@ def final_entity_search(sample_base, entity_searched):
     gatk_program = '-T UnifiedGenotyper -l INFO'
     path_to_reference = "-R {}".format(reference_genome)
     options = '-A Coverage -A AlleleBalance -G Standard -stand_call_conf 50.0 -stand_emit_conf 10.0 -mbq 20 -deletions 0.05 -dcov 1000'
-    input_files = '-I {}/BWA_BAM_files/{}.{}.realigned.recal.dupmarked.bam'.format(output_directory, sample_base, entity_searched)
-    output_file = '--out {0}/{1}.{2}.vcf -metrics {0}/{1}.{2}.outmetrics.txt'.format(output_directory, sample_base, entity_searched)
+    input_files = '-I {}/BWA_BAM_files/{}.{}.realigned.recal.dupmarked.bam'.format(output_directory, sample_base,
+                                                                                   entity_searched)
+    output_file = '--out {0}/{1}.{2}.vcf -metrics {0}/{1}.{2}.outmetrics.txt'.format(output_directory, sample_base,
+                                                                                     entity_searched)
 
     if entity_searched == 'indel':
         search_item = '-glm INDEL'
-        path_to_vcf = "-D {}".format(indel_vcf_file)
     elif entity_searched == 'snp':
         search_item = '-glm SNP'
-        path_to_vcf = "-D {}".format(snp_vcf_file)
+
+    if species == 'human':
+        if entity_searched == 'indel':
+            path_to_vcf = "-D {}".format(indel_vcf_file)
+        elif entity_searched == 'snp':
+            path_to_vcf = "-D {}".format(snp_vcf_file)
+
+    elif species == 'mouse':
+        if entity_searched == 'indel':
+            path_to_vcf = "-D {}".format(indel_vcf_file)
+        else:
+            path_to_vcf = ''
 
     command = [path_to_executable, gatk_program, path_to_reference, input_files, path_to_vcf, output_file, options,
                search_item]
@@ -416,43 +458,28 @@ def bwa_setup(sample_base):
     bwa_samstat_analysis(sample_base)
 
 
+def entity_search(sample_base, entity_searched):
+    gatk_intervals(sample_base, entity_searched)
+    gatk_realignment(sample_base, entity_searched)
+    gatk_recalibration(sample_base, entity_searched)
+    gatk_realign_recal(sample_base, entity_searched)
+    mark_dup(sample_base, entity_searched)
+    dup_index(sample_base, entity_searched)
+    final_entity_search(sample_base, entity_searched)
+
+
 def bwa_entity_search(sample_base):
     if desired_search == 'indel':
-        gatk_intervals(sample_base, 'indel')
-        gatk_realignment(sample_base, 'indel')
-        gatk_recalibration(sample_base, 'indel')
-        gatk_realign_recal(sample_base, 'indel')
-        mark_dup(sample_base, 'indel')
-        dup_index(sample_base, 'indel')
-        final_entity_search(sample_base, 'indel')
+        entity_search(sample_base, 'indel')
 
     elif bwa_entity_search == 'snp':
-        gatk_intervals(sample_base, 'snp')
-        gatk_realignment(sample_base, 'snp')
-        gatk_recalibration(sample_base, 'snp')
-        gatk_realign_recal(sample_base, 'snp')
-        mark_dup(sample_base, 'snp')
-        dup_index(sample_base, 'snp')
-        final_entity_search(sample_base, 'snp')
+        entity_search(sample_base, 'snp')
 
     elif bwa_entity_search == 'both':
-        gatk_intervals(sample_base, 'indel')
-        gatk_realignment(sample_base, 'indel')
-        gatk_recalibration(sample_base, 'indel')
-        gatk_realign_recal(sample_base, 'indel')
-        mark_dup(sample_base, 'indel')
-        dup_index(sample_base, 'indel')
-        final_entity_search(sample_base, 'indel')
-        gatk_intervals(sample_base, 'snp')
-        gatk_realignment(sample_base, 'snp')
-        gatk_recalibration(sample_base, 'snp')
-        gatk_realign_recal(sample_base, 'snp')
-        mark_dup(sample_base, 'snp')
-        dup_index(sample_base, 'snp')
-        final_entity_search(sample_base, 'snp')
+        entity_search(sample_base, 'indel')
+        entity_search(sample_base, 'snp')
 
 
 def final_bwa_search(sample_base):
     bwa_setup(sample_base)
     bwa_entity_search(sample_base)
-
