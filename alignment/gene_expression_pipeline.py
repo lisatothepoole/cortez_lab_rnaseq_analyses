@@ -148,10 +148,12 @@ def hisat2_alignment(sample_base):
 
 # Conversion from SAM file to BAM file
 def sam_to_bam(sample_base):
+    # -S input is SAM file
+    # -b output to BAM file
     print("Start SAM to BAM conversion for {}".format(sample_base))
 
     path_to_executable = '{} view'.format(samtools)
-    path_to_samples = '-S -b {}/BAM_files/{}.sam'.format(output_directory, sample_base) # -S input is SAM file -b output to BAM file
+    path_to_samples = '-S -b {}/BAM_files/{}.sam'.format(output_directory, sample_base)
     output_filename = '-o {}/BAM_files/{}.bam'.format(output_directory, sample_base)
     threads = '--threads {}'.format(n_cpus)
     command = [path_to_executable, path_to_samples, threads, output_filename]
