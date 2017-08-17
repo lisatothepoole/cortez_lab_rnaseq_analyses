@@ -9,6 +9,11 @@ This pipeline is optimized for the Lab Mac with IP address 10.105.17.158 on the 
 Requirements for this experiment - sequencing data files must be in a folder entitled
 "fasta" within a folder corresponding to the experiment name; modify general information
 in the first part of the script (starting with number of samples).
+
+Important: The file names need to be a common sample base followed by a hyphen then sequential numbers (such as LP-1,
+LP-2)
+    In this example, "sample_base" for the pipeline would be "LP-(1-i)" while the "sample" argument would be "LP"
+
 """
 
 import os
@@ -23,7 +28,7 @@ read_length = 75  # Valid options are integer values for the length of reads ord
 sample_suffix = 'fastq'  # suffix second to last in sequencing file, usually fastq, fasta, fa
 compression_suffix = 'gz'  # suffix at the end of sequencing file
 n_cpus = 8  # Number of threads used to run analysis, more = faster
-pc = 'cortez_mac'
+pc = 'cortez_mac' # should be cortez_mac for the computer by the window, modify if a new computer is added
 experiment_name = 'alex_rnaseq'  # Insert name of experiment that is also the name of folder
 
 # Program setup and files needed for analysis - should not need to change unless you add an additional organism
@@ -34,6 +39,8 @@ if pc == 'cortez_mac':
     samtools = '/usr/local/bin/samtools'
     featurecounts = '/usr/local/bin/featureCounts'
     samstat = '/usr/local/bin/samstat'
+    cufflinks = '/Users/temporary/Sources/cufflinks-2.1.1.OSX_x86_64/cufflinks'
+    adaptors = '/Users/temporary/genomes/adapters/illumina_truseq.fasta'
 
     # experiment specific information
     output_directory = "/Users/temporary/projects/{}".format(experiment_name)
@@ -41,15 +48,13 @@ if pc == 'cortez_mac':
 
     # Reference files
     if species == 'mouse':
-        adaptors = '/Users/temporary/genomes/adapters/illumina_truseq.fasta'
         transcripts = '/Users/temporary/genomes/Mus_musculus/UCSC/mm10/Annotation/Genes/genes.gtf'
         hisat2_index = '/Users/temporary/genomes/Mus_musculus/UCSC/mm10/Sequence/HISAT2_index/mm10.genome'
         reference_genome = '/Users/temporary/genomes/Mus_musculus/UCSC/mm10/Sequence/WholeGenomeFasta/genome_indel.fa'
 
     elif species == 'human':
-        adaptors = '/Users/temporary/genomes/adapters/illumina_truseq.fasta'
         transcripts = '/Users/temporary/genomes/Homo_sapiens_hg38/Homo_sapiens/UCSC/hg38/Annotation/Genes/genes.gtf'
-        hisat2_index = '/Users/temporary/genomes/Homo_sapiens_hg38/Homo_sapiens/UCSC/hg38/Sequence/HISAT2Index.hisat_genome'
+        hisat2_index = '/Users/temporary/genomes/Homo_sapiens_hg38/Homo_sapiens/UCSC/hg38/Sequence/HISAT2Index/hisat_genome'
         reference_genome = '/Users/temporary/genomes/Homo_sapiens_hg38/Homo_sapiens/UCSC/hg38/Sequence/BWAIndex/genome.fa'
 
     else:
@@ -110,13 +115,13 @@ def flexbar_trim(sample_base):
 def hisat2_alignment(sample_base):
     print("Starting alignment of {}".format(sample_base))
 
-    # Creation of folder to have the BAM files
-    if not os.path.exists('BAM_files'):
-        os.mkdir('BAM_files')
+    # Creation of folder to hold the BAM files
+    if not os.path.exists('{}/BAM_files'.format(output_directory)):
+        os.mkdir('{}/BAM_files'.format(output_directory))
 
     # Options for HISAT2 alignment
     path_to_executable = hisat2
-    output_name = '-S ./BAM_files/{}.sam'.format(sample_base)
+    output_name = '-S {}/BAM_files/{}.sam'.format(output_directory, sample_base)
     threads = '-p {}'.format(n_cpus)
     indices = '-x {}'.format(hisat2_index)
 
@@ -143,11 +148,11 @@ def hisat2_alignment(sample_base):
 
 # Conversion from SAM file to BAM file
 def sam_to_bam(sample_base):
-    print("Start sam to bam conversion for {}".format(sample_base))
+    print("Start SAM to BAM conversion for {}".format(sample_base))
 
     path_to_executable = '{} view'.format(samtools)
-    path_to_samples = '-S -b ./BAM_files/{}.sam'.format(sample_base)
-    output_filename = '-o ./BAM_files/{}.bam'.format(sample_base)
+    path_to_samples = '-S -b {}/BAM_files/{}.sam'.format(output_directory, sample_base) # -S input is SAM file -b output to BAM file
+    output_filename = '-o {}/BAM_files/{}.bam'.format(output_directory, sample_base)
     threads = '--threads {}'.format(n_cpus)
     command = [path_to_executable, path_to_samples, threads, output_filename]
     call_code = ' '.join(command)
@@ -162,7 +167,7 @@ def sam_to_bam(sample_base):
         if output:
             print output.strip()
         rc = process.poll()
-    print("Finished sam to bam conversion for {}".format(sample_base))
+    print("Finished SAM to BAM conversion for {}".format(sample_base))
 
 
 # Sorting BAM file
@@ -170,8 +175,8 @@ def bam_sort(sample_base):
     print("Start sorting {}".format(sample_base))
 
     path_to_executable = '{} sort'.format(samtools)
-    path_to_samples = './BAM_files/{}.bam'.format(sample_base)
-    output_filename = '-o ./BAM_files/{}.sorted.bam'.format(sample_base)
+    path_to_samples = '{}/BAM_files/{}.bam'.format(output_directory, sample_base)
+    output_filename = '-o {}/BAM_files/{}.sorted.bam'.format(output_directory, sample_base)
     threads = '--threads {}'.format(n_cpus)
     command = [path_to_executable, threads, output_filename, path_to_samples]
     call_code = ' '.join(command)
@@ -192,8 +197,9 @@ def bam_sort(sample_base):
 # Indexing BAM file for viewing with IGV
 def bam_index(sample_base):
     print("Start indexing {}".format(sample_base))
+
     path_to_executable = '{} index'.format(samtools)
-    path_to_samples = './BAM_files/{}.sorted.bam'.format(sample_base)
+    path_to_samples = '{}/BAM_files/{}.sorted.bam'.format(output_directory, sample_base)
     threads = '--threads {}'.format(n_cpus)
     command = [path_to_executable, threads, path_to_samples]
     call_code = ' '.join(command)
@@ -216,11 +222,11 @@ def samstat_analysis(sample_base):
     print("Start SAMSTAT check for {}".format(sample_base))
 
     # Creation of folder to contain quality control analyses
-    if not os.path.exists('quality_control'):
-        os.mkdir('quality_control')
+    if not os.path.exists('{}/quality_control'.format(output_directory)):
+        os.mkdir('{}/quality_control'.format(output_directory))
 
     path_to_executable = samstat
-    path_to_samples = './BAM_files/{}.sorted.bam'.format(sample_base)
+    path_to_samples = '{}/BAM_files/{}.sorted.bam'.format(output_directory, sample_base)
     command = [path_to_executable, path_to_samples]
     call_code = ' '.join(command)
     print(call_code)
@@ -237,16 +243,26 @@ def samstat_analysis(sample_base):
     print("Done with SAMSTAT check for {}".format(sample_base))
 
     # Move SAMSTAT files to quality control folder
-    os.rename('./BAM_files/{}.sorted.bam.samstat.html'.format(sample_base),
-              './SAMSTAT_analysis/{}.hisat2.sorted.bam.samstat.html'.format(sample_base))
+    os.rename('{}/BAM_files/{}.sorted.bam.samstat.html'.format(output_directory, sample_base),
+              '{}/SAMSTAT_analysis/{}.hisat2.sorted.bam.samstat.html'.format(output_directory, sample_base))
 
 
-# Delete unncessary files produced during pipeline
+# Delete excessive files produced during pipeline
 def excess_file_cleanup(sample_base):
-    os.remove('./BAM_files/{}.sam'.format(sample_base))
-    os.remove('./BAM_files/{}.bam'.format(sample_base))
+    os.remove('{}/BAM_files/{}.sam'.format(output_directory, sample_base))
+    os.remove('{}/BAM_files/{}.bam'.format(output_directory, sample_base))
+
+    if read_type == 'SE':
+        unzipped_fasta = '{}/{}-trimmed.{}'.format(fasta_directory,
+                                             sample_base, sample_suffix)
+    elif read_type == 'PE':
+        unzipped_fasta_1 = '{0}/{1}-trimmed_1.{2}'.format(fasta_directory, sample_base, sample_suffix)
+        unzipped_fasta_2 = '{0}/{1}-trimmed_2.{2}'.format(fasta_directory, sample_base, sample_suffix)
+
+    os.remove(unzipped_fasta)
 
 
+# Completion of all steps of Aligning to RNAseq data
 def rnaseq_expression_alignment(sample_base):
     flexbar_trim(sample_base)
     hisat2_alignment(sample_base)
@@ -271,18 +287,19 @@ def featurecounts_analysis(sample):
 
     path_to_executable = featurecounts
     annotation_file = "-a {}".format(transcripts)
-    output_name = "-o gene_counts.txt"
+    output_name = "-o {}_gene_counts.txt".format(experiment_name)
     gtf_feature = '-t exon'
     gtf_attibute = '-g gene_id'
     quality_score = '-Q 30'
     out_string = ''
-    for i in range(1, 5):
-        input_files = ' ./BAM_files/{0}-{1}.sorted.bam'.format(sample, i)
+    for i in range(1, number_of_samples_add_1):
+        input_files = '{}/BAM_files/{}-{}.sorted.bam'.format(output_directory, sample, i)
         out_string += input_files
     if read_type == 'SE':
         important_options = "-T {}".format(n_cpus)
     elif read_type == 'PE':
         important_options = "-p -B -C -T {}".format(n_cpus)
+
 
     command = [path_to_executable, important_options, gtf_feature, gtf_attibute, quality_score, annotation_file,
                output_name, out_string]
@@ -304,3 +321,5 @@ def run_all(sample):
     for i in range(1, number_of_samples_add_1):
         rnaseq_expression_alignment('{}-{}'.format(sample, i))
     featurecounts_analysis(sample)
+    for i in range(1, number_of_samples_add_1):
+        excess_file_cleanup('{}-{}'.format(sample, i))
