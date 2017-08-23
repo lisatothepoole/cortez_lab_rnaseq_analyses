@@ -22,6 +22,12 @@ entity_plotted = 'fold_change' # what you are measuring. Could be a fold_change 
 x_axis_parameter = 'WT expression' # description of what is plotted on the X axis
 y_axis_parameter = 'KO expression' # description of what is plotted on the Y axis
 
+# Importing file(s) with data to compare
+to_read = os.path.join(directory, filename) # combines the directory and filename to allow import file
+data = pd.read_csv(to_read, comment='#', header=0) # imports file
+print(data.dtypes) # tells what each column header is and what type of data is in each column
+
+
 
 if axis_scale == 'log10':
     x_axis_label = "$log_10$ {} {}".format(entity_plotted, x_axis_parameter)
