@@ -20,8 +20,8 @@ import os
 import subprocess
 
 # General Information - modify appropriately for each experiment
-number_of_samples = '10'  # Valid options are integer values indicating the number of sequenced samples
-number_of_samples_add_1 = '11'  # Add 1 to the number_of_samples
+number_of_samples = 10  # Valid options are integer values indicating the number of sequenced samples
+number_of_samples_add_1 = 11  # Add 1 to the number_of_samples
 species = 'mouse'  # Valid options for this pipeline are 'mouse' or 'human'
 read_type = 'PE'  # Valid options are 'PE' or paired-end sequencing or 'SE' for single-end sequencing
 read_length = 75  # Valid options are integer values for the length of reads ordered (50bp, 75bp, 150bp, etc)
