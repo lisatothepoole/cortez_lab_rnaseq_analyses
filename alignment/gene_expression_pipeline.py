@@ -1,20 +1,4 @@
 #!/usr/bin/python
-"""
-RNAseq analysis for Cortez Lab
-Authors: Lisa Poole and James Pino
-
-This pipeline is optimized for the Lab Mac with IP address 10.105.17.158 on the desk by the glass window.
-(Can be optimized for other computers by changing general information and setup under pc.)
-
-Requirements for this experiment - sequencing data files must be in a folder entitled
-"fasta" within a folder corresponding to the experiment name; modify general information
-in the first part of the script (starting with number of samples).
-
-Important: The file names need to be a common sample base followed by a hyphen then sequential numbers (such as LP-1,
-LP-2)
-    In this example, "sample_base" for the pipeline would be "LP-(1-i)" while the "sample" argument would be "LP"
-
-"""
 
 import os
 import subprocess
@@ -23,13 +7,13 @@ import subprocess
 number_of_samples = 10  # Valid options are integer values indicating the number of sequenced samples
 number_of_samples_add_1 = 11  # Add 1 to the number_of_samples
 species = 'mouse'  # Valid options for this pipeline are 'mouse' or 'human'
-read_type = 'PE'  # Valid options are 'PE' or paired-end sequencing or 'SE' for single-end sequencing
-read_length = 75  # Valid options are integer values for the length of reads ordered (50bp, 75bp, 150bp, etc)
-sample_suffix = 'fastq'  # suffix second to last in sequencing file, usually fastq, fasta, fa
-compression_suffix = 'gz'  # suffix at the end of sequencing file
-n_cpus = 8  # Number of threads used to run analysis, more = faster
+# read_type = 'PE'  # Valid options are 'PE' or paired-end sequencing or 'SE' for single-end sequencing
+# read_length = 75  # Valid options are integer values for the length of reads ordered (50bp, 75bp, 150bp, etc)
+# sample_suffix = 'fastq'  # suffix second to last in sequencing file, usually fastq, fasta, fa
+# compression_suffix = 'gz'  # suffix at the end of sequencing file
+# n_cpus = 8  # Number of threads used to run analysis, more = faster
 pc = 'cortez_mac' # should be cortez_mac for the computer by the window, modify if a new computer is added
-experiment_name = 'alex_rnaseq'  # Insert name of experiment that is also the name of folder
+# experiment_name = 'alex_rnaseq'  # Insert name of experiment that is also the name of folder
 
 # Program setup and files needed for analysis - should not need to change unless you add an additional organism
 if pc == 'cortez_mac':
@@ -42,9 +26,9 @@ if pc == 'cortez_mac':
     cufflinks = '/Users/temporary/Sources/cufflinks-2.1.1.OSX_x86_64/cufflinks'
     adaptors = '/Users/temporary/genomes/adapters/illumina_truseq.fasta'
 
-    # experiment specific information
-    output_directory = "/Users/temporary/projects/{}".format(experiment_name)
-    fasta_directory = "/Users/temporary/projects/{}/fastq".format(experiment_name)
+    # # experiment specific information
+    # output_directory = "/Users/temporary/projects/{}".format(experiment_name)
+    # fasta_directory = "/Users/temporary/projects/{}/fastq".format(experiment_name)
 
     # Reference files
     if species == 'mouse':
@@ -63,7 +47,7 @@ if pc == 'cortez_mac':
 
 
 # Sequencing Adaptor Trimming via Flexbar
-def flexbar_trim(sample_base):
+def flexbar_trim(sample_base, read_type, read_length, adaptors, sample_suffix, compression_suffix, n_cpus, fasta_directory):
     # Flexbar options
     # '-a' = adaptor sequences (fasta format)
     # '-n' = number of threads
@@ -112,7 +96,7 @@ def flexbar_trim(sample_base):
 
 
 # Alignment to the genome using HISAT2
-def hisat2_alignment(sample_base):
+def hisat2_alignment(sample_base, n_cpus, read_type, sample_suffix, output_directory, fasta_directory):
     print("Starting alignment of {}".format(sample_base))
 
     # Creation of folder to hold the BAM files
@@ -147,7 +131,7 @@ def hisat2_alignment(sample_base):
 
 
 # Conversion from SAM file to BAM file
-def sam_to_bam(sample_base):
+def sam_to_bam(sample_base, n_cpus, output_directory):
     # -S input is SAM file
     # -b output to BAM file
     print("Start SAM to BAM conversion for {}".format(sample_base))
@@ -173,7 +157,7 @@ def sam_to_bam(sample_base):
 
 
 # Sorting BAM file
-def bam_sort(sample_base):
+def bam_sort(sample_base, n_cpus, output_directory):
     print("Start sorting {}".format(sample_base))
 
     path_to_executable = '{} sort'.format(samtools)
@@ -197,7 +181,7 @@ def bam_sort(sample_base):
 
 
 # Indexing BAM file for viewing with IGV
-def bam_index(sample_base):
+def bam_index(sample_base, n_cpus, output_directory):
     print("Start indexing {}".format(sample_base))
 
     path_to_executable = '{} index'.format(samtools)
@@ -220,7 +204,7 @@ def bam_index(sample_base):
 
 
 # SAMSTAT quality check of alignment
-def samstat_analysis(sample_base):
+def samstat_analysis(sample_base, output_directory):
     print("Start SAMSTAT check for {}".format(sample_base))
 
     # Creation of folder to contain quality control analyses
@@ -250,32 +234,30 @@ def samstat_analysis(sample_base):
 
 
 # Delete excessive files produced during pipeline
-def excess_file_cleanup(sample_base):
+def excess_file_cleanup(sample_base, read_type, sample_suffix, output_directory, fasta_directory):
     os.remove('{}/BAM_files/{}.sam'.format(output_directory, sample_base))
     os.remove('{}/BAM_files/{}.bam'.format(output_directory, sample_base))
 
     if read_type == 'SE':
-        unzipped_fasta = '{}/{}-trimmed.{}'.format(fasta_directory,
-                                             sample_base, sample_suffix)
+        os.remove('{}/{}-trimmed.{}'.format(fasta_directory,
+                                             sample_base, sample_suffix))
     elif read_type == 'PE':
-        unzipped_fasta_1 = '{0}/{1}-trimmed_1.{2}'.format(fasta_directory, sample_base, sample_suffix)
-        unzipped_fasta_2 = '{0}/{1}-trimmed_2.{2}'.format(fasta_directory, sample_base, sample_suffix)
-
-    os.remove(unzipped_fasta)
+        os.remove('{0}/{1}-trimmed_1.{2}'.format(fasta_directory, sample_base, sample_suffix))
+        os.remove('{0}/{1}-trimmed_2.{2}'.format(fasta_directory, sample_base, sample_suffix))
 
 
 # Completion of all steps of Aligning to RNAseq data
-def rnaseq_expression_alignment(sample_base):
-    flexbar_trim(sample_base)
-    hisat2_alignment(sample_base)
-    sam_to_bam(sample_base)
-    bam_sort(sample_base)
-    bam_index(sample_base)
-    samstat_analysis(sample_base)
+def rnaseq_expression_alignment():
+    flexbar_trim()
+    hisat2_alignment()
+    sam_to_bam()
+    bam_sort()
+    bam_index()
+    samstat_analysis()
 
 
 # FeatureCounts - align reads to genes to give expression level
-def featurecounts_analysis(sample):
+def featurecounts_analysis(sample, experiment_name, output_directory, n_cpus, read_type):
     # FeatureCounts options
     # -a annotation file
     # -o name of output file with read counts
@@ -319,9 +301,44 @@ def featurecounts_analysis(sample):
     print("Done running {}".format(sample))
 
 
+def fpkm_tpm_calculation(sample_base, output_directory, n_cpus, read_type):
+    print('Begin cufflinks FPKM and TPM calculations')
+    # Creation of folder to contain fpkm_analysis
+    if not os.path.exists('{}/quantification'.format(output_directory)):
+        os.mkdir('{}/quantification'.format(output_directory))
+
+    os.mkdir('{}/quantification/{}'.format(output_directory, sample_base))
+
+    path_to_executable = cufflinks
+    output = "-o {}/quantification/{}".format(output_directory, sample_base)
+    threads = '-p {}'.format(n_cpus)
+    annotation_file = "-g {}".format(transcripts)
+    if read_type == 'SE':
+        library_type = "--library-type fr-unstranded"
+    elif read_type == 'PE':
+        library_type = "--library-type fr-firststrand"
+
+    input_file = '{}/BAM_files/{}.sorted.bam'.format(output_directory, sample_base)
+
+    command = [path_to_executable, output, threads, annotation_file, library_type, input_file]
+    call_code = ' '.join(command)
+    print(call_code)
+    process = subprocess.Popen([call_code], shell=True,
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    while True:
+        output = process.stdout.readline()
+        if output == '' and process.poll() is not None:
+            break
+        if output:
+            print output.strip()
+        rc = process.poll()
+    print("Done running {}".format(sample_base))
+
+
 def run_all(sample):
     for i in range(1, number_of_samples_add_1):
         rnaseq_expression_alignment('{}-{}'.format(sample, i))
+        fpkm_tpm_calculation('{}-{}'.format(sample, i))
     featurecounts_analysis(sample)
     for i in range(1, number_of_samples_add_1):
         excess_file_cleanup('{}-{}'.format(sample, i))
